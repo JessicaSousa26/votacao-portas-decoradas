@@ -1,0 +1,46 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Função que identifica administradora
+    function isAdmin() {
+      return request.auth != null &&
+             request.auth.token.email == "jhessymary26@gmail.com";
+    }
+
+    // CONFIGURAÇÕES DE VOTAÇÃO
+    match /settings/votacao {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // FOTOS NATALINAS
+    match /fotos_natal/{fotoId} {
+      allow read: if true;
+
+      allow create: if request.auth != null
+        && request.resource.data.andar is int
+        && request.resource.data.apartamento is string
+        && request.resource.data.urlFoto is string
+        && request.resource.data.votos == 0;
+
+      allow update: if request.auth != null
+        && request.resource.data.diff(resource.data).changedKeys().hasOnly(['votos'])
+        && request.resource.data.votos == resource.data.votos + 1
+        && request.time >= get(/databases/$(database)/documents/settings/votacao).data.inicio
+        && request.time <= get(/databases/$(database)/documents/settings/votacao).data.fim
+        && existsAfter(/databases/$(database)/documents/fotos_natal/$(fotoId)/voters/$(request.auth.uid));
+
+      allow delete: if isAdmin();
+
+      match /voters/{uid} {
+        allow read: if request.auth != null && request.auth.uid == uid;
+        allow create: if request.auth != null && request.auth.uid == uid
+          && !exists(/databases/$(database)/documents/fotos_natal/$(fotoId)/voters/$(uid))
+          && request.time >= get(/databases/$(database)/documents/settings/votacao).data.inicio
+          && request.time <= get(/databases/$(database)/documents/settings/votacao).data.fim;
+        allow update, delete: if false;
+      }
+    }
+  }
+}
