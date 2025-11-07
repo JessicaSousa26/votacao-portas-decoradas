@@ -1,0 +1,325 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>Ranking — Votação Natalina</title>
+
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Sofia:wght@400;700&display=swap" rel="stylesheet">
+
+  <script src="https://www.gstatic.com/firebasejs/11.0.2/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/11.0.2/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore-compat.js"></script>
+  <script src="./js/firebase.js"></script>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+
+  <style>
+    body{margin:0;font-family:"Sofia",system-ui,sans-serif;background:#f8fffb;color:#0f766e;}
+    .card{ background:#fff; border:1px solid #d1fae5; border-radius:16px; padding:16px; max-width:1080px; margin:0 auto 20px; box-shadow:0 8px 20px rgba(16,185,129,.08); }
+    h2{margin:0 0 10px;color:#065f46;}
+
+    .hero-natal{position:relative;margin:0 auto 24px;border-radius:18px;overflow:hidden;box-shadow:0 12px 30px rgba(16,185,129,.12);aspect-ratio:21/7;min-height:clamp(220px,32vw,360px);}
+    .hero-natal .hero-bg{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:center;}
+    .hero-natal .hero-overlay{position:absolute;inset:0;background:linear-gradient(90deg,rgba(255,255,255,0.6),rgba(255,255,255,0.1) 60%,transparent);}
+    .hero-content{position:relative;z-index:2;display:flex;flex-direction:column;justify-content:center;gap:10px;height:100%;padding:clamp(14px,4vw,28px);color:#065f46;}
+    .hero-title{margin:0;font-size:clamp(22px,4vw,38px);}
+    .hero-sub{font-size:clamp(14px,2vw,18px);margin:0 0 6px;}
+    .btn{background:#0f766e;color:#fff;border:none;border-radius:12px;padding:10px 16px;font-weight:700;cursor:pointer;}
+    .btn:hover{background:#0b5e57;}
+
+    .natal-controls{position:absolute;top:12px;right:12px;display:flex;gap:8px;padding:8px;background:rgba(255,255,255,0.75);backdrop-filter:blur(6px);
+      border:1px solid rgba(15,118,110,0.18);border-radius:14px;box-shadow:0 8px 18px rgba(6,95,70,.12);z-index:3;}
+    .ctl-btn{width:40px;height:40px;display:inline-flex;align-items:center;justify-content:center;font-size:18px;border-radius:10px;
+      border:1px solid #cbd5e1;background:#0f766e;color:#fff;cursor:pointer;}
+    .ctl-btn[aria-pressed="false"]{background:#e5e7eb;color:#0f766e;}
+
+    .item{display:flex;align-items:center;gap:14px;padding:12px 8px;border-bottom:1px dashed #e5e7eb;}
+    .rank{width:44px;height:44px;display:flex;align-items:center;justify-content:center;background:#10b981;color:#fff;border-radius:12px;font-weight:700;}
+    .meta{flex:1;}
+    .votos{font-weight:800;color:#065f46;}
+    .thumb{width:100px;height:60px;object-fit:cover;border-radius:10px;border:1px solid #e5e7eb;}
+
+    .snowflake{position:fixed;top:-10px;color:white;font-size:1em;pointer-events:none;z-index:9999;animation:fall linear forwards;opacity:.8;}
+    @keyframes fall{to{transform:translateY(100vh) rotate(360deg);opacity:.7;}}
+    .sparkle{position:absolute;width:6px;height:6px;background:radial-gradient(white 40%,transparent 60%);border-radius:50%;
+      animation:sparkle 2s infinite ease-in-out;pointer-events:none;}
+    @keyframes sparkle{0%,100%{opacity:0;transform:scale(.2);}50%{opacity:1;transform:scale(1);}}
+  
+  /* === QR Code flutuante === */
+  #qrcode-fixo{position:fixed;bottom:20px;right:20px;z-index:1000;background:rgba(255,255,255,.9);border:2px solid #d4af37;border-radius:12px;box-shadow:0 4px 10px rgba(0,0,0,.3);padding:8px;animation:qrGlow 3s infinite alternate;}
+  #qrcode-fixo img{width:100px;height:100px;display:block}
+  @keyframes qrGlow{0%{box-shadow:0 0 8px #d4af37;}100%{box-shadow:0 0 24px #ffecb3;}}
+  #qrcode-fixo[data-tip]{position:fixed}
+  #qrcode-fixo[data-tip]::after{content:attr(data-tip);position:absolute;bottom:110%;right:0;white-space:nowrap;background:#111827;color:#fff;padding:6px 10px;border-radius:8px;box-shadow:0 4px 8px rgba(0,0,0,.25);opacity:0;transform:translateY(6px);transition:.2s;pointer-events:none;font-size:12px}
+  #qrcode-fixo[data-tip]:hover::after{opacity:1;transform:translateY(0)}
+
+  
+  /* Rótulo do QR flutuante */
+  #qrcode-fixo{display:flex;flex-direction:column;align-items:center;gap:6px}
+  #qrcode-fixo .qr-label{font-size:12px;color:#374151;font-weight:700;white-space:nowrap}
+  @media (max-width: 520px){
+    #qrcode-fixo .qr-label{display:none}
+  }
+
+  
+  /* ==== Modal PIN ==== */
+  #pinModalBack{position:fixed;inset:0;background:rgba(0,0,0,.55);display:none;z-index:9999;align-items:center;justify-content:center}
+  #pinModal{background:#fff;border-radius:16px;box-shadow:0 20px 60px rgba(0,0,0,.35);max-width:360px;width:92%;padding:18px;border:1px solid #d1fae5;font-family:system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,'Helvetica Neue',Arial}
+  #pinModal h3{margin:6px 0 8px;color:#065f46}
+  #pinModal p{margin:0 0 12px;color:#0f766e;font-size:14px}
+  #pinModal .row{display:flex;gap:8px;align-items:center;margin:8px 0}
+  #pinModal input[type=password], #pinModal input[type=text]{flex:1;border:1px solid #94a3b8;border-radius:10px;padding:10px 12px;font-size:16px;outline:none}
+  #pinModal .actions{display:flex;gap:10px;justify-content:flex-end;margin-top:12px}
+  #pinModal button{border:none;border-radius:10px;padding:10px 14px;font-weight:700;cursor:pointer}
+  #pinCancel{background:#eee;color:#111827}
+  #pinOk{background:#065f46;color:#fff}
+  #pinError{color:#b91c1c;font-weight:700;min-height:20px;font-size:13px}
+</style>
+  <link rel="manifest" href="./manifest.json">
+  <meta name="theme-color" content="#0f766e">
+  <link rel="icon" type="image/png" sizes="32x32" href="./assets/favicon.png">
+  <link rel="apple-touch-icon" href="./assets/icon-192.png">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+</head>
+<body>
+  <section class="hero-natal">
+    <img class="hero-bg" src="./assets/hero-natal.jpg" alt="Decoração natalina">
+    <div class="hero-overlay"></div>
+    <div class="hero-content">
+      <h1 class="hero-title">Ranking Natalino 🎄</h1>
+      <p class="hero-sub">Acesso restrito à administradora</p>
+      <div>
+        <button id="loginAdmin" class="btn">Entrar com Google</button>
+        <button id="btnGerarPDF" class="btn" style="background:#d97706;">📄 Gerar PDF</button>
+      </div>
+    </div>
+    <div class="natal-controls">
+      <button id="ctlSnow" class="ctl-btn" aria-pressed="true" title="Ativar/Desativar neve">🌨️</button>
+      <button id="ctlSpark" class="ctl-btn" aria-pressed="true" title="Ativar/Desativar brilhos">✨</button>
+    </div>
+  </section>
+
+  <div class="card" id="rankingBox" style="display:none;">
+    <h2>Classificação Atual</h2>
+    <div id="lista"></div>
+  </div>
+
+  <div class="card" id="guard" style="display:none;text-align:center;">
+    <h2>Área restrita</h2>
+    <p>Entre com uma conta de administradora autorizada em settings/admins.emails.</p>
+    <button id="retryLogin" class="btn">Tentar novamente</button>
+  </div>
+
+  <script>
+  const auth=firebase.auth(),db=firebase.firestore();
+  const rankingBox=document.getElementById("rankingBox");
+  const lista=document.getElementById("lista");
+  const guard=document.getElementById("guard");
+  let adminEmails=[];
+
+  async function fetchAdmins(){
+    const s=await db.collection("settings").doc("admins").get();
+    adminEmails=s.exists&&Array.isArray(s.data().emails)?s.data().emails:[];
+  }
+  function isAdmin(u){if(!u)return false;return adminEmails.map(e=>(e||"").toLowerCase()).includes((u.email||"").toLowerCase());}
+
+  async function carregarRanking(){
+    const snap=await db.collection("fotos_natal").orderBy("votos","desc").orderBy("dataEnvio","asc").get();
+    let pos=1;lista.innerHTML="";
+    snap.forEach(doc=>{
+      const d=doc.data();
+      lista.innerHTML+=`
+        <div class="item">
+          <div class="rank">${pos++}</div>
+          <img class="thumb" src="${d.urlFoto}" alt="Foto ${d.andar}º ${d.apartamento}">
+          <div class="meta"><div><strong>${d.andar??'-'}º andar</strong> — Apto ${d.apartamento??'-'}</div></div>
+          <div class="votos">${d.votos||0}</div>
+        </div>`;
+    });
+  }
+
+  auth.onAuthStateChanged(async(u)=>{
+    await fetchAdmins();
+    if(!u||!isAdmin(u)){rankingBox.style.display="none";guard.style.display="block";return;}
+    guard.style.display="none";rankingBox.style.display="block";await carregarRanking();
+  });
+
+  document.getElementById("loginAdmin").addEventListener("click",()=>{
+    const provider=new firebase.auth.GoogleAuthProvider(); auth.signInWithPopup(provider);
+  });
+  document.getElementById("retryLogin").addEventListener("click",()=>{
+    const provider=new firebase.auth.GoogleAuthProvider(); auth.signInWithPopup(provider);
+  });
+
+  // PDF bonito
+  document.getElementById("btnGerarPDF").addEventListener("click", async () => {
+    const { jsPDF } = window.jspdf;
+    const pdf = new jsPDF({ orientation: "portrait", unit: "pt", format: "a4" });
+    const largura = pdf.internal.pageSize.getWidth();
+    let y = 60;
+
+    pdf.setFillColor(15, 118, 110);
+    pdf.rect(0, 0, largura, 60, "F");
+    pdf.setTextColor(255, 255, 255);
+    pdf.setFont("helvetica", "bold"); pdf.setFontSize(18);
+    pdf.text("Ranking Final — Votação Natalina do Condomínio", largura / 2, 38, { align: "center" });
+    pdf.setFont("helvetica", "normal"); pdf.setFontSize(10);
+    pdf.text(`Gerado em: ${new Date().toLocaleString("pt-BR")}`, largura - 40, 52, { align: "right" });
+
+    // Cabeçalho tabela
+    y = 90;
+    pdf.setFont("helvetica", "bold"); pdf.setTextColor(6, 95, 70); pdf.setFontSize(12);
+    pdf.text("Posição", 40, y); pdf.text("Andar", 110, y); pdf.text("Apto", 180, y); pdf.text("Votos", 250, y);
+    pdf.setDrawColor(200, 230, 220); pdf.line(40, y + 3, largura - 40, y + 3); y += 20;
+
+    const snap = await db.collection("fotos_natal").orderBy("votos", "desc").get();
+    let pos = 1;
+    pdf.setFont("helvetica", "normal"); pdf.setFontSize(11); pdf.setTextColor(0, 0, 0);
+    snap.forEach((doc) => {
+      const d = doc.data();
+      if (y > 750) { pdf.addPage(); y = 60; }
+      pdf.text(`${pos}`, 45, y);
+      pdf.text(`${d.andar ?? "-"}`, 115, y);
+      pdf.text(`${d.apartamento ?? "-"}`, 185, y);
+      pdf.text(`${d.votos ?? 0}`, 255, y);
+      y += 20; pos++;
+    });
+
+    pdf.setFontSize(10); pdf.setTextColor(100,100,100);
+    pdf.text("© Sistema de Votação Natalina — Desenvolvido para o Condomínio", largura/2, pdf.internal.pageSize.getHeight()-20, {align:"center"});
+    pdf.save("ranking-natalino.pdf");
+  });
+
+  // Effects
+  const snowContainer=document.createElement("div");document.body.appendChild(snowContainer);
+  let snowTimer=null;const TOGGLE_KEY="natal.snow.enabled";
+  function createSnowflake(){const f=document.createElement("div");f.className="snowflake";f.textContent="❄";
+    f.style.left=Math.random()*100+"vw";f.style.fontSize=(8+Math.random()*16)+"px";f.style.animationDuration=(6+Math.random()*6)+"s";
+    snowContainer.appendChild(f);setTimeout(()=>f.remove(),12000);}
+  function startSnow(){if(snowTimer)return;for(let i=0;i<8;i++)createSnowflake();snowTimer=setInterval(createSnowflake,300);}
+  function stopSnow(){if(snowTimer){clearInterval(snowTimer);snowTimer=null;}snowContainer.querySelectorAll(".snowflake").forEach(n=>n.remove());}
+  function setSnowEnabled(e){if(e)startSnow();else stopSnow();document.getElementById("ctlSnow").setAttribute("aria-pressed",String(e));localStorage.setItem(TOGGLE_KEY,String(e));}
+  const snowOn=(localStorage.getItem(TOGGLE_KEY)??"true")==="true";setSnowEnabled(snowOn);
+  document.getElementById("ctlSnow").addEventListener("click",()=>{const cur=(localStorage.getItem(TOGGLE_KEY)??"true")==="true";setSnowEnabled(!cur);});
+
+  const SPARK_KEY="natal.sparkles.enabled";let sparkLayer=null;
+  function createSparkLayer(){if(sparkLayer)return sparkLayer;const hero=document.querySelector(".hero-natal");if(!hero)return null;
+    sparkLayer=document.createElement("div");sparkLayer.id="sparkLayer";Object.assign(sparkLayer.style,{position:"absolute",inset:"0",pointerEvents:"none",zIndex:"2"});hero.appendChild(sparkLayer);return sparkLayer;}
+  function startSpark(){const l=createSparkLayer();if(!l)return;if(l.childElementCount>0)return;
+    for(let i=0;i<15;i++){const d=document.createElement("div");d.className="sparkle";d.style.left=Math.random()*100+"%";d.style.top=Math.random()*100+"%";d.style.animationDelay=Math.random()*4+"s";l.appendChild(d);}}
+  function stopSpark(){if(sparkLayer)sparkLayer.replaceChildren();}
+  function setSparklesEnabled(e){if(e)startSpark();else stopSpark();document.getElementById("ctlSpark").setAttribute("aria-pressed",String(e));localStorage.setItem(SPARK_KEY,String(e));}
+  const sparkOn=(localStorage.getItem(SPARK_KEY)??"true")==="true";setSparklesEnabled(sparkOn);
+  createSparkLayer();
+  document.getElementById("ctlSpark").addEventListener("click",()=>{const cur=(localStorage.getItem(SPARK_KEY)??"true")==="true";setSparklesEnabled(!cur);});
+  </script>
+  <div id="qrcode-fixo" data-tip="Aponte a câmera para abrir a votação"><img src="./img/qrcode.png" alt="QR Code Votação Natalina"></div>
+
+<script>
+  document.addEventListener('DOMContentLoaded', () => {
+    const qr = document.getElementById('qrcode-fixo');
+    if (qr) qr.style.display = 'none';
+  });
+</script>
+
+  <script>if('serviceWorker' in navigator){window.addEventListener('load',()=>navigator.serviceWorker.register('./sw.js').catch(()=>{}));}</script>
+
+<div id="pinModalBack" role="dialog" aria-modal="true">
+  <div id="pinModal">
+    <h3>Proteção do Ranking</h3>
+    <p>Confirme o <b>PIN de administrador</b> para ver o ranking.</p>
+    <div class="row">
+      <input id="pinInput" type="password" placeholder="Digite o PIN" autocomplete="one-time-code" inputmode="numeric" />
+      <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:#374151">
+        <input id="pinShow" type="checkbox"/> mostrar
+      </label>
+    </div>
+    <div id="pinError"></div>
+    <div class="actions">
+      <button id="pinCancel" type="button">Cancelar</button>
+      <button id="pinOk" type="button">Confirmar</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// Proteção com Modal de PIN (lido do Firestore: settings/admins.pin)
+(async () => {
+  try {
+    if (typeof firebase === 'undefined') return;
+    const auth = firebase.auth();
+    const db = firebase.firestore();
+
+    const waitUser = () => new Promise(res => {
+      const unsub = auth.onAuthStateChanged(u => { if (u){unsub(); res(u);} });
+    });
+    const user = firebase.auth().currentUser || await waitUser();
+    if (!user) { location.href = './index.html'; return; }
+
+    const sid = `rankPinOk:${user.uid}`;
+    if (sessionStorage.getItem(sid) === 'true') return;
+
+    const admDoc = await db.collection('settings').doc('admins').get();
+    const emails = admDoc.exists && Array.isArray(admDoc.data().emails) ? admDoc.data().emails : [];
+    if (!emails.includes(user.email)) {
+      alert('Acesso restrito.');
+      location.href = './index.html';
+      return;
+    }
+    const pin = (admDoc.exists && admDoc.data().pin) ? String(admDoc.data().pin) : null;
+    if (!pin) {
+      alert('PIN de administrador não configurado. Defina settings/admins.pin no Firestore.');
+      location.href = './index.html';
+      return;
+    }
+
+    const back = document.getElementById('pinModalBack');
+    const input = document.getElementById('pinInput');
+    const show = document.getElementById('pinShow');
+    const ok = document.getElementById('pinOk');
+    const cancel = document.getElementById('pinCancel');
+    const err = document.getElementById('pinError');
+
+    let tries = 3;
+    back.style.display = 'flex';
+    input.focus();
+
+    show.addEventListener('change', () => {
+      input.type = show.checked ? 'text' : 'password';
+    });
+
+    cancel.addEventListener('click', () => {
+      location.href = './index.html';
+    });
+
+    function handleTry() {
+      const val = String(input.value || '').trim();
+      if (val === pin) {
+        sessionStorage.setItem(sid, 'true');
+        back.style.display = 'none';
+      } else {
+        tries--;
+        if (tries > 0) {
+          err.textContent = `PIN incorreto. Você ainda tem ${tries} tentativa(s).`;
+          input.value = '';
+          input.focus();
+        } else {
+          alert('Limite de tentativas atingido.');
+          location.href = './index.html';
+        }
+      }
+    }
+
+    ok.addEventListener('click', handleTry);
+    input.addEventListener('keydown', (e) => { if (e.key === 'Enter') handleTry(); });
+  } catch (e) {
+    console.error(e);
+    alert('Não foi possível validar o acesso ao ranking.');
+    location.href = './index.html';
+  }
+})();
+</script>
+</body>
+</html>

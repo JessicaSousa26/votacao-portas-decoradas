@@ -1,0 +1,22 @@
+{
+  "name": "Votação Natalina — Torre 4",
+  "short_name": "Natal Torre 4",
+  "description": "Envie fotos, vote nas decorações e acompanhe o ranking de Natal do condomínio.",
+  "start_url": "/index.html",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#f8fffb",
+  "theme_color": "#0f766e",
+  "icons": [
+    {
+      "src": "./assets/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "./assets/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}
